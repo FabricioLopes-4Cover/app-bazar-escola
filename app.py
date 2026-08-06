@@ -68,6 +68,7 @@ def quantidade_vendida_por_item(df_vendas, nome_item):
 aba_itens, aba_vendas = conectar_planilha()
 
 st.title("🛍️ Bazar da Escola")
+st.caption("Autora: Prof. Ana Hortência")
 
 aba1, aba2, aba3, aba4 = st.tabs(["➕ Cadastrar item", "📦 Estoque", "💰 Registrar venda", "📊 Vendas"])
 
