@@ -4,7 +4,7 @@ from datetime import datetime
 import gspread
 from google.oauth2.service_account import Credentials
 
-st.set_page_config(page_title="Bazar da Escola", page_icon="🛍️", layout="centered")
+st.set_page_config(page_title="Bazar 9º Ano 2027", page_icon="🛍️", layout="centered")
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -71,7 +71,7 @@ def formatar_moeda(valor):
 
 aba_itens, aba_vendas = conectar_planilha()
 
-st.title("🛍️ Bazar da Escola")
+st.header("🛍️ Bazar 9º Ano 2027")
 st.caption("Autora: Prof. Ana Hortência")
 
 aba1, aba2, aba3, aba4, aba5 = st.tabs([
@@ -203,24 +203,6 @@ with aba5:
     if df_vendas_total.empty:
         st.info("Nenhuma venda registrada ainda.")
     else:
-        resumo = df_vendas_total.groupby("item", as_index=False).agg(
-            quantidade_vendida=("quantidade_vendida", "sum"),
-            valor_total=("valor_total", "sum"),
-        ).sort_values("quantidade_vendida", ascending=False)
-
-        resumo_exibicao = resumo.copy()
-        resumo_exibicao["valor_total"] = resumo_exibicao["valor_total"].apply(formatar_moeda)
-
-        st.dataframe(
-            resumo_exibicao.rename(columns={
-                "item": "Item",
-                "quantidade_vendida": "Quantidade vendida",
-                "valor_total": "Valor total",
-            }),
-            use_container_width=True,
-            hide_index=True,
-        )
-
         col1, col2 = st.columns(2)
-        col1.metric("Total de itens vendidos", int(resumo["quantidade_vendida"].sum()))
-        col2.metric("Valor total vendido", formatar_moeda(resumo["valor_total"].sum()))
+        col1.metric("Total de itens vendidos", int(df_vendas_total["quantidade_vendida"].sum()))
+        col2.metric("Valor total vendido", formatar_moeda(df_vendas_total["valor_total"].sum()))
