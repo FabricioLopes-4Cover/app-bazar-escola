@@ -65,12 +65,18 @@ def quantidade_vendida_por_item(df_vendas, nome_item):
     return int(df_vendas.loc[df_vendas["item"] == nome_item, "quantidade_vendida"].sum())
 
 
+def formatar_moeda(valor):
+    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
 aba_itens, aba_vendas = conectar_planilha()
 
 st.title("🛍️ Bazar da Escola")
 st.caption("Autora: Prof. Ana Hortência")
 
-aba1, aba2, aba3, aba4 = st.tabs(["➕ Cadastrar item", "📦 Estoque", "💰 Registrar venda", "📊 Vendas"])
+aba1, aba2, aba3, aba4, aba5 = st.tabs([
+    "➕ Cadastrar item", "📦 Estoque", "💰 Registrar venda", "📊 Vendas", "📈 Total vendido",
+])
 
 with aba1:
     st.subheader("Cadastrar novo item")
@@ -101,8 +107,12 @@ with aba2:
         df_itens["disponivel"] = df_itens["quantidade_cadastrada"] - df_itens["vendido"]
         df_itens["valor_total"] = df_itens["valor_unitario"] * df_itens["quantidade_cadastrada"]
 
+        df_exibicao = df_itens.copy()
+        df_exibicao["valor_unitario"] = df_exibicao["valor_unitario"].apply(formatar_moeda)
+        df_exibicao["valor_total"] = df_exibicao["valor_total"].apply(formatar_moeda)
+
         st.dataframe(
-            df_itens.rename(columns={
+            df_exibicao.rename(columns={
                 "nome": "Item",
                 "valor_unitario": "Valor unitário",
                 "quantidade_cadastrada": "Qtd. cadastrada",
@@ -116,7 +126,7 @@ with aba2:
 
         col1, col2 = st.columns(2)
         col1.metric("Total de itens cadastrados", int(df_itens["quantidade_cadastrada"].sum()))
-        col2.metric("Valor total do estoque", f"R$ {df_itens['valor_total'].sum():.2f}")
+        col2.metric("Valor total do estoque", formatar_moeda(df_itens["valor_total"].sum()))
 
 with aba3:
     st.subheader("Registrar venda")
@@ -138,7 +148,7 @@ with aba3:
                 item_selecionado = st.selectbox("Item vendido", opcoes)
                 disponivel = int(itens_disponiveis.loc[itens_disponiveis["nome"] == item_selecionado, "disponivel"].iloc[0])
                 valor_unitario = float(itens_disponiveis.loc[itens_disponiveis["nome"] == item_selecionado, "valor_unitario"].iloc[0])
-                st.caption(f"Disponível em estoque: {disponivel} | Valor unitário: R$ {valor_unitario:.2f}")
+                st.caption(f"Disponível em estoque: {disponivel} | Valor unitário: {formatar_moeda(valor_unitario)}")
 
                 qtd_vendida = st.number_input("Quantidade vendida", min_value=1, max_value=max(disponivel, 1), step=1, value=1)
                 confirmar = st.form_submit_button("Registrar venda")
@@ -156,7 +166,7 @@ with aba3:
                             valor_total,
                         ])
                         st.cache_resource.clear()
-                        st.success(f"Venda registrada: {qtd_vendida}x {item_selecionado} = R$ {valor_total:.2f}")
+                        st.success(f"Venda registrada: {qtd_vendida}x {item_selecionado} = {formatar_moeda(valor_total)}")
                         st.rerun()
 
 with aba4:
@@ -166,8 +176,12 @@ with aba4:
     if df_vendas.empty:
         st.info("Nenhuma venda registrada ainda.")
     else:
+        df_exibicao = df_vendas.copy()
+        df_exibicao["valor_unitario"] = df_exibicao["valor_unitario"].apply(formatar_moeda)
+        df_exibicao["valor_total"] = df_exibicao["valor_total"].apply(formatar_moeda)
+
         st.dataframe(
-            df_vendas.rename(columns={
+            df_exibicao.rename(columns={
                 "data_hora": "Data/Hora",
                 "item": "Item",
                 "quantidade_vendida": "Quantidade",
@@ -180,4 +194,33 @@ with aba4:
 
         col1, col2 = st.columns(2)
         col1.metric("Quantidade total vendida", int(df_vendas["quantidade_vendida"].sum()))
-        col2.metric("Valor total vendido", f"R$ {df_vendas['valor_total'].sum():.2f}")
+        col2.metric("Valor total vendido", formatar_moeda(df_vendas["valor_total"].sum()))
+
+with aba5:
+    st.subheader("Total de itens vendidos")
+    df_vendas_total = carregar_vendas(aba_vendas)
+
+    if df_vendas_total.empty:
+        st.info("Nenhuma venda registrada ainda.")
+    else:
+        resumo = df_vendas_total.groupby("item", as_index=False).agg(
+            quantidade_vendida=("quantidade_vendida", "sum"),
+            valor_total=("valor_total", "sum"),
+        ).sort_values("quantidade_vendida", ascending=False)
+
+        resumo_exibicao = resumo.copy()
+        resumo_exibicao["valor_total"] = resumo_exibicao["valor_total"].apply(formatar_moeda)
+
+        st.dataframe(
+            resumo_exibicao.rename(columns={
+                "item": "Item",
+                "quantidade_vendida": "Quantidade vendida",
+                "valor_total": "Valor total",
+            }),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        col1, col2 = st.columns(2)
+        col1.metric("Total de itens vendidos", int(resumo["quantidade_vendida"].sum()))
+        col2.metric("Valor total vendido", formatar_moeda(resumo["valor_total"].sum()))
