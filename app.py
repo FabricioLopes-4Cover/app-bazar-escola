@@ -12,7 +12,8 @@ SCOPES = [
 ]
 
 ITENS_HEADER = ["nome", "valor_unitario", "quantidade_cadastrada"]
-VENDAS_HEADER = ["data_hora", "item", "quantidade_vendida", "valor_unitario", "valor_total"]
+VENDAS_HEADER = ["data_hora", "item", "quantidade_vendida", "valor_unitario", "valor_total", "forma_pagamento"]
+FORMAS_PAGAMENTO = ["PIX", "Cartão", "Dinheiro"]
 
 
 @st.cache_resource(show_spinner=False)
@@ -35,6 +36,9 @@ def conectar_planilha():
         aba_vendas = planilha.add_worksheet("vendas", rows=1000, cols=len(VENDAS_HEADER))
         aba_vendas.append_row(VENDAS_HEADER)
 
+    if aba_vendas.row_values(1) != VENDAS_HEADER:
+        aba_vendas.update([VENDAS_HEADER], "A1")
+
     return aba_itens, aba_vendas
 
 
@@ -56,6 +60,7 @@ def carregar_vendas(aba_vendas):
     df["quantidade_vendida"] = pd.to_numeric(df["quantidade_vendida"], errors="coerce").fillna(0).astype(int)
     df["valor_unitario"] = pd.to_numeric(df["valor_unitario"], errors="coerce").fillna(0)
     df["valor_total"] = pd.to_numeric(df["valor_total"], errors="coerce").fillna(0)
+    df["forma_pagamento"] = df["forma_pagamento"].replace("", "Não informado")
     return df
 
 
@@ -69,9 +74,21 @@ def formatar_moeda(valor):
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
+def converter_valor_brl(texto):
+    texto_limpo = texto.strip().replace("R$", "").strip()
+    if not texto_limpo:
+        return None
+    if "," in texto_limpo:
+        texto_limpo = texto_limpo.replace(".", "").replace(",", ".")
+    try:
+        return float(texto_limpo)
+    except ValueError:
+        return None
+
+
 aba_itens, aba_vendas = conectar_planilha()
 
-st.header("🛍️ Bazar 9º Ano 2027")
+st.subheader("🛍️ Bazar 9º Ano 2027")
 st.caption("Autora: Prof. Ana Hortência")
 
 aba1, aba2, aba3, aba4, aba5 = st.tabs([
@@ -82,13 +99,16 @@ with aba1:
     st.subheader("Cadastrar novo item")
     with st.form("form_cadastro", clear_on_submit=True):
         nome = st.text_input("Nome do item (ex: Óculos de sol)")
-        valor = st.number_input("Valor unitário (R$)", min_value=0.0, step=0.5, format="%.2f")
+        valor_texto = st.text_input("Valor unitário (R$)", placeholder="Ex: 2,50")
         quantidade = st.number_input("Quantidade cadastrada", min_value=1, step=1, value=1)
         enviado = st.form_submit_button("Cadastrar")
 
         if enviado:
+            valor = converter_valor_brl(valor_texto)
             if not nome.strip():
                 st.error("Informe o nome do item.")
+            elif valor is None or valor <= 0:
+                st.error("Informe um valor válido, por exemplo: 2,50")
             else:
                 aba_itens.append_row([nome.strip(), valor, int(quantidade)])
                 st.cache_resource.clear()
@@ -151,6 +171,7 @@ with aba3:
                 st.caption(f"Disponível em estoque: {disponivel} | Valor unitário: {formatar_moeda(valor_unitario)}")
 
                 qtd_vendida = st.number_input("Quantidade vendida", min_value=1, max_value=max(disponivel, 1), step=1, value=1)
+                forma_pagamento = st.selectbox("Forma de pagamento", FORMAS_PAGAMENTO)
                 confirmar = st.form_submit_button("Registrar venda")
 
                 if confirmar:
@@ -164,6 +185,7 @@ with aba3:
                             int(qtd_vendida),
                             valor_unitario,
                             valor_total,
+                            forma_pagamento,
                         ])
                         st.cache_resource.clear()
                         st.success(f"Venda registrada: {qtd_vendida}x {item_selecionado} = {formatar_moeda(valor_total)}")
@@ -187,6 +209,7 @@ with aba4:
                 "quantidade_vendida": "Quantidade",
                 "valor_unitario": "Valor unitário",
                 "valor_total": "Valor total",
+                "forma_pagamento": "Pagamento",
             }).sort_values("Data/Hora", ascending=False),
             use_container_width=True,
             hide_index=True,
@@ -203,6 +226,25 @@ with aba5:
     if df_vendas_total.empty:
         st.info("Nenhuma venda registrada ainda.")
     else:
+        st.markdown("**Por forma de pagamento**")
+        resumo_pagamento = df_vendas_total.groupby("forma_pagamento", as_index=False).agg(
+            quantidade_vendida=("quantidade_vendida", "sum"),
+            valor_total=("valor_total", "sum"),
+        )
+        resumo_exibicao = resumo_pagamento.copy()
+        resumo_exibicao["valor_total"] = resumo_exibicao["valor_total"].apply(formatar_moeda)
+        st.dataframe(
+            resumo_exibicao.rename(columns={
+                "forma_pagamento": "Forma de pagamento",
+                "quantidade_vendida": "Quantidade vendida",
+                "valor_total": "Valor total",
+            }),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        st.divider()
+        st.markdown("**Total geral**")
         col1, col2 = st.columns(2)
         col1.metric("Total de itens vendidos", int(df_vendas_total["quantidade_vendida"].sum()))
         col2.metric("Valor total vendido", formatar_moeda(df_vendas_total["valor_total"].sum()))
