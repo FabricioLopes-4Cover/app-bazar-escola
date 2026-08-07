@@ -199,6 +199,8 @@ with aba4:
         st.info("Nenhuma venda registrada ainda.")
     else:
         df_exibicao = df_vendas.copy()
+        df_exibicao["_data_hora_ordenacao"] = pd.to_datetime(df_exibicao["data_hora"], format="%d/%m/%Y %H:%M:%S")
+        df_exibicao = df_exibicao.sort_values("_data_hora_ordenacao", ascending=False).drop(columns="_data_hora_ordenacao")
         df_exibicao["valor_unitario"] = df_exibicao["valor_unitario"].apply(formatar_moeda)
         df_exibicao["valor_total"] = df_exibicao["valor_total"].apply(formatar_moeda)
 
@@ -210,7 +212,7 @@ with aba4:
                 "valor_unitario": "Valor unitário",
                 "valor_total": "Valor total",
                 "forma_pagamento": "Pagamento",
-            }).sort_values("Data/Hora", ascending=False),
+            }),
             use_container_width=True,
             hide_index=True,
         )
