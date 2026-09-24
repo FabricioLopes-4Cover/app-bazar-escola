@@ -4,7 +4,7 @@ from datetime import datetime
 import gspread
 from google.oauth2.service_account import Credentials
 
-st.set_page_config(page_title="Bazar 9º Ano 2027", page_icon="🛍️", layout="centered")
+st.set_page_config(page_title="Bazar 9º Ano 2027", page_icon="🛍️", layout="wide")
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
