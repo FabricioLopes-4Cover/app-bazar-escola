@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 from datetime import datetime
 import gspread
@@ -78,12 +79,52 @@ def converter_valor_brl(texto):
     texto_limpo = texto.strip().replace("R$", "").strip()
     if not texto_limpo:
         return None
+    # Só números (ex: 110) são lidos como centavos: 110 -> 1,10
+    if texto_limpo.isdigit():
+        return int(texto_limpo) / 100
     if "," in texto_limpo:
         texto_limpo = texto_limpo.replace(".", "").replace(",", ".")
     try:
         return float(texto_limpo)
     except ValueError:
         return None
+
+
+LABEL_VALOR = "Valor unitário (R$)"
+
+# Máscara de moeda no campo de valor: o aluno digita só os números e a vírgula
+# entra sozinha (1 -> 0,01, 11 -> 0,11, 110 -> 1,10).
+MASCARA_VALOR_JS = """
+<script>
+const doc = window.parent.document;
+const setter = Object.getOwnPropertyDescriptor(window.parent.HTMLInputElement.prototype, "value").set;
+
+function formatar(texto) {
+  const digitos = texto.replace(/\\D/g, "").replace(/^0+/, "").slice(0, 6);
+  if (!digitos) return "";
+  const completo = digitos.padStart(3, "0");
+  return completo.slice(0, -2) + "," + completo.slice(-2);
+}
+
+function aplicar() {
+  doc.querySelectorAll('input[aria-label="LABEL"]').forEach((campo) => {
+    if (campo.dataset.mascara) return;
+    campo.dataset.mascara = "1";
+    campo.setAttribute("inputmode", "numeric");
+    campo.addEventListener("input", () => {
+      const novo = formatar(campo.value);
+      if (novo !== campo.value) {
+        setter.call(campo, novo);
+        campo.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    });
+  });
+}
+
+aplicar();
+new MutationObserver(aplicar).observe(doc.body, { childList: true, subtree: true });
+</script>
+""".replace("LABEL", LABEL_VALOR)
 
 
 aba_itens, aba_vendas = conectar_planilha()
@@ -99,7 +140,11 @@ with aba1:
     st.subheader("Cadastrar novo item")
     with st.form("form_cadastro", clear_on_submit=True):
         nome = st.text_input("Nome do item (ex: Óculos de sol)")
-        valor_texto = st.text_input("Valor unitário (R$)", placeholder="Ex: 2,50")
+        valor_texto = st.text_input(
+            LABEL_VALOR,
+            placeholder="0,00",
+            help="Digite só os números. Ex: 250 vira 2,50",
+        )
         quantidade = st.number_input("Quantidade cadastrada", min_value=1, step=1, value=1)
         enviado = st.form_submit_button("Cadastrar")
 
@@ -114,6 +159,8 @@ with aba1:
                 st.cache_resource.clear()
                 st.success(f"Item '{nome.strip()}' cadastrado!")
                 st.rerun()
+
+    components.html(MASCARA_VALOR_JS, height=0)
 
 with aba2:
     st.subheader("Itens cadastrados")
