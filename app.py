@@ -80,6 +80,10 @@ def quantidade_vendida_por_item(df_vendas, nome_item):
     return int(df_vendas.loc[df_vendas["item"] == nome_item, "quantidade_vendida"].sum())
 
 
+def formatar_percentual(fracao):
+    return f"{fracao:.2%}".replace(".", ",")
+
+
 def chave_alfabetica(texto):
     # Ignora maiúsculas e acentos, para "Óculos" ficar junto de "oculos"
     sem_acento = unicodedata.normalize("NFKD", str(texto)).encode("ascii", "ignore").decode()
@@ -373,7 +377,7 @@ with aba6:
             st.caption(f"{qtd_em_estoque} itens para vender")
 
         parte_vendida = valor_vendido / valor_bazar if valor_bazar > 0 else 0.0
-        st.markdown(f"**Já vendemos {parte_vendida:.0%} do valor do bazar**")
+        st.markdown(f"**Já vendemos {formatar_percentual(parte_vendida)} do valor do bazar**")
 
         tema_escuro = getattr(getattr(getattr(st, "context", None), "theme", None), "type", None) == "dark"
         cor_vendido, cor_estoque = CORES_GRAFICO["escuro" if tema_escuro else "claro"]
@@ -390,7 +394,7 @@ with aba6:
             legenda = "".join(
                 f'<div style="display:flex;align-items:center;gap:8px;margin-top:6px">'
                 f'<span style="width:14px;height:14px;border-radius:3px;background:{cor};flex:none"></span>'
-                f'{nome}: {formatar_moeda(valor)} ({fracao:.0%})</div>'
+                f'{nome}: {formatar_moeda(valor)} ({formatar_percentual(fracao)})</div>'
                 for nome, valor, fracao, cor in partes
             )
             st.markdown(
