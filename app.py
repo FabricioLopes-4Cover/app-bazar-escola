@@ -1,6 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
+import unicodedata
 from datetime import datetime
 import gspread
 from google.oauth2.service_account import Credentials
@@ -69,6 +70,12 @@ def quantidade_vendida_por_item(df_vendas, nome_item):
     if df_vendas.empty:
         return 0
     return int(df_vendas.loc[df_vendas["item"] == nome_item, "quantidade_vendida"].sum())
+
+
+def chave_alfabetica(texto):
+    # Ignora maiúsculas e acentos, para "Óculos" ficar junto de "oculos"
+    sem_acento = unicodedata.normalize("NFKD", str(texto)).encode("ascii", "ignore").decode()
+    return sem_acento.strip().lower()
 
 
 def formatar_moeda(valor):
@@ -174,7 +181,7 @@ with aba2:
         df_itens["disponivel"] = df_itens["quantidade_cadastrada"] - df_itens["vendido"]
         df_itens["valor_total"] = df_itens["valor_unitario"] * df_itens["quantidade_cadastrada"]
 
-        df_exibicao = df_itens.copy()
+        df_exibicao = df_itens.sort_values("nome", key=lambda nomes: nomes.map(chave_alfabetica))
         df_exibicao["valor_unitario"] = df_exibicao["valor_unitario"].apply(formatar_moeda)
         df_exibicao["valor_total"] = df_exibicao["valor_total"].apply(formatar_moeda)
 
