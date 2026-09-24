@@ -214,22 +214,42 @@ with aba3:
         df_itens["disponivel"] = df_itens["quantidade_cadastrada"] - df_itens["vendido"]
         itens_disponiveis = df_itens[df_itens["disponivel"] > 0]
 
+        if "venda_registrada" in st.session_state:
+            st.success(st.session_state.pop("venda_registrada"))
+
         if itens_disponiveis.empty:
             st.warning("Não há itens disponíveis em estoque.")
         else:
-            with st.form("form_venda", clear_on_submit=True):
-                opcoes = itens_disponiveis["nome"].tolist()
-                item_selecionado = st.selectbox("Item vendido", opcoes)
-                disponivel = int(itens_disponiveis.loc[itens_disponiveis["nome"] == item_selecionado, "disponivel"].iloc[0])
-                valor_unitario = float(itens_disponiveis.loc[itens_disponiveis["nome"] == item_selecionado, "valor_unitario"].iloc[0])
-                st.caption(f"Disponível em estoque: {disponivel} | Valor unitário: {formatar_moeda(valor_unitario)}")
+            with st.container(border=True):
+                # Itens sem estoque já ficaram de fora em itens_disponiveis
+                opcoes = sorted(itens_disponiveis["nome"].tolist(), key=chave_alfabetica)
+                item_selecionado = st.selectbox(
+                    "Item vendido",
+                    opcoes,
+                    index=None,
+                    placeholder="Digite para buscar o item",
+                    key="venda_item",
+                )
 
-                qtd_vendida = st.number_input("Quantidade vendida", min_value=1, max_value=max(disponivel, 1), step=1, value=1)
-                forma_pagamento = st.selectbox("Forma de pagamento", FORMAS_PAGAMENTO)
-                confirmar = st.form_submit_button("Registrar venda")
+                if item_selecionado is None:
+                    disponivel = 0
+                    valor_unitario = 0.0
+                else:
+                    linha_item = itens_disponiveis.loc[itens_disponiveis["nome"] == item_selecionado].iloc[0]
+                    disponivel = int(linha_item["disponivel"])
+                    valor_unitario = float(linha_item["valor_unitario"])
+                    st.caption(f"Disponível em estoque: {disponivel} | Valor unitário: {formatar_moeda(valor_unitario)}")
+
+                qtd_vendida = st.number_input(
+                    "Quantidade vendida", min_value=1, max_value=max(disponivel, 1), step=1, value=1, key="venda_qtd",
+                )
+                forma_pagamento = st.selectbox("Forma de pagamento", FORMAS_PAGAMENTO, key="venda_pagamento")
+                confirmar = st.button("Registrar venda")
 
                 if confirmar:
-                    if qtd_vendida > disponivel:
+                    if item_selecionado is None:
+                        st.error("Escolha o item vendido.")
+                    elif qtd_vendida > disponivel:
                         st.error("Quantidade maior que o disponível em estoque.")
                     else:
                         valor_total = qtd_vendida * valor_unitario
@@ -242,7 +262,12 @@ with aba3:
                             forma_pagamento,
                         ])
                         st.cache_resource.clear()
-                        st.success(f"Venda registrada: {qtd_vendida}x {item_selecionado} = {formatar_moeda(valor_total)}")
+                        st.session_state["venda_registrada"] = (
+                            f"Venda registrada: {qtd_vendida}x {item_selecionado} = {formatar_moeda(valor_total)}"
+                        )
+                        # Limpa a tela para a próxima venda
+                        for chave in ("venda_item", "venda_qtd", "venda_pagamento"):
+                            st.session_state.pop(chave, None)
                         st.rerun()
 
 with aba4:
