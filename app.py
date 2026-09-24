@@ -16,6 +16,8 @@ SCOPES = [
 ITENS_HEADER = ["nome", "valor_unitario", "quantidade_cadastrada"]
 VENDAS_HEADER = ["data_hora", "item", "quantidade_vendida", "valor_unitario", "valor_total", "forma_pagamento"]
 FORMAS_PAGAMENTO = ["PIX", "Cartão", "Dinheiro"]
+# Azul = vendido, laranja = em estoque (cores testadas para daltonismo)
+CORES_GRAFICO = {"claro": ["#2a78d6", "#eb6834"], "escuro": ["#3987e5", "#d95926"]}
 
 
 @st.cache_resource(show_spinner=False)
@@ -134,13 +136,21 @@ new MutationObserver(aplicar).observe(doc.body, { childList: true, subtree: true
 """.replace("LABEL", LABEL_VALOR)
 
 
+def injetar_script(html):
+    # st.iframe substitui components.html nas versões novas do Streamlit
+    if hasattr(st, "iframe"):
+        st.iframe(html, height=1)
+    else:
+        components.html(html, height=0)
+
+
 aba_itens, aba_vendas = conectar_planilha()
 
 st.subheader("🛍️ Bazar 9º Ano 2027")
 st.caption("Autora: Prof. Ana Hortência")
 
-aba1, aba2, aba3, aba4, aba5 = st.tabs([
-    "➕ Cadastrar item", "📦 Estoque", "💰 Registrar venda", "📊 Vendas", "📈 Total vendido",
+aba1, aba2, aba3, aba4, aba5, aba6 = st.tabs([
+    "➕ Cadastrar item", "📦 Estoque", "💰 Registrar venda", "📊 Vendas", "📈 Total vendido", "⚖️ Estoque X Venda",
 ])
 
 with aba1:
@@ -167,7 +177,7 @@ with aba1:
                 st.success(f"Item '{nome.strip()}' cadastrado!")
                 st.rerun()
 
-    components.html(MASCARA_VALOR_JS, height=0)
+    injetar_script(MASCARA_VALOR_JS)
 
 with aba2:
     st.subheader("Itens cadastrados")
@@ -241,8 +251,9 @@ with aba3:
                     valor_unitario = float(linha_item["valor_unitario"])
                     st.caption(f"Disponível em estoque: {disponivel} | Valor unitário: {formatar_moeda(valor_unitario)}")
 
+                # Sem max_value: acima do limite o Streamlit ignora o número digitado e venderia 1 sem avisar
                 qtd_vendida = st.number_input(
-                    "Quantidade vendida", min_value=1, max_value=max(disponivel, 1), step=1, value=1, key=f"venda_qtd_{rodada}",
+                    "Quantidade vendida", min_value=1, step=1, value=1, key=f"venda_qtd_{rodada}",
                 )
                 forma_pagamento = st.selectbox("Forma de pagamento", FORMAS_PAGAMENTO, key=f"venda_pagamento_{rodada}")
                 confirmar = st.button("Registrar venda")
@@ -251,7 +262,7 @@ with aba3:
                     if item_selecionado is None:
                         st.error("Escolha o item vendido.")
                     elif qtd_vendida > disponivel:
-                        st.error("Quantidade maior que o disponível em estoque.")
+                        st.error(f"Quantidade maior que o disponível em estoque ({disponivel}). Nada foi registrado.")
                     else:
                         valor_total = qtd_vendida * valor_unitario
                         aba_vendas.append_row([
@@ -329,3 +340,79 @@ with aba5:
         col1, col2 = st.columns(2)
         col1.metric("Total de itens vendidos", int(df_vendas_total["quantidade_vendida"].sum()))
         col2.metric("Valor total vendido", formatar_moeda(df_vendas_total["valor_total"].sum()))
+
+with aba6:
+    st.subheader("Estoque X Venda")
+    df_itens = carregar_itens(aba_itens)
+    df_vendas_resumo = carregar_vendas(aba_vendas)
+
+    if df_itens.empty:
+        st.info("Nenhum item cadastrado ainda.")
+    else:
+        df_itens["vendido"] = df_itens["nome"].apply(lambda n: quantidade_vendida_por_item(df_vendas_resumo, n))
+        df_itens["disponivel"] = (df_itens["quantidade_cadastrada"] - df_itens["vendido"]).clip(lower=0)
+
+        valor_em_estoque = float((df_itens["disponivel"] * df_itens["valor_unitario"]).sum())
+        qtd_em_estoque = int(df_itens["disponivel"].sum())
+        valor_vendido = float(df_vendas_resumo["valor_total"].sum()) if not df_vendas_resumo.empty else 0.0
+        qtd_vendida = int(df_vendas_resumo["quantidade_vendida"].sum()) if not df_vendas_resumo.empty else 0
+        valor_bazar = valor_em_estoque + valor_vendido
+
+        col1, col2 = st.columns(2)
+        with col1.container(border=True):
+            st.metric("💰 Total de venda", formatar_moeda(valor_vendido))
+            st.caption(f"{qtd_vendida} itens vendidos")
+        with col2.container(border=True):
+            st.metric("📦 Total em estoque", formatar_moeda(valor_em_estoque))
+            st.caption(f"{qtd_em_estoque} itens para vender")
+
+        parte_vendida = valor_vendido / valor_bazar if valor_bazar > 0 else 0.0
+        st.markdown(f"**Já vendemos {parte_vendida:.0%} do valor do bazar**")
+
+        tema_escuro = getattr(getattr(getattr(st, "context", None), "theme", None), "type", None) == "dark"
+        cor_vendido, cor_estoque = CORES_GRAFICO["escuro" if tema_escuro else "claro"]
+
+        if valor_bazar > 0:
+            partes = [
+                ("Vendido", valor_vendido, parte_vendida, cor_vendido),
+                ("Em estoque", valor_em_estoque, 1 - parte_vendida, cor_estoque),
+            ]
+            barra = "".join(
+                f'<div style="flex:{valor};background:{cor};border-radius:4px"></div>'
+                for _, valor, _, cor in partes if valor > 0
+            )
+            legenda = "".join(
+                f'<div style="display:flex;align-items:center;gap:8px;margin-top:6px">'
+                f'<span style="width:14px;height:14px;border-radius:3px;background:{cor};flex:none"></span>'
+                f'{nome}: {formatar_moeda(valor)} ({fracao:.0%})</div>'
+                for nome, valor, fracao, cor in partes
+            )
+            st.markdown(
+                f'<div style="display:flex;gap:2px;height:36px;margin:4px 0 8px">{barra}</div>{legenda}',
+                unsafe_allow_html=True,
+            )
+
+        st.caption(f"Venda + estoque = {formatar_moeda(valor_bazar)}")
+
+        st.divider()
+        st.markdown("**Vendas por forma de pagamento**")
+        if df_vendas_resumo.empty:
+            por_pagamento = pd.Series(0.0, index=FORMAS_PAGAMENTO)
+        else:
+            por_pagamento = df_vendas_resumo.groupby("forma_pagamento")["valor_total"].sum()
+            # PIX, Cartão e Dinheiro sempre aparecem, nessa ordem; outras (ex: "Não informado") vão no fim
+            extras = [f for f in por_pagamento.index if f not in FORMAS_PAGAMENTO]
+            por_pagamento = por_pagamento.reindex(FORMAS_PAGAMENTO + extras, fill_value=0.0)
+
+        maior_valor = float(por_pagamento.max())
+        linhas = "".join(
+            f'<div style="display:flex;align-items:center;gap:10px;margin:8px 0">'
+            f'<div style="width:110px;flex:none">{forma}</div>'
+            f'<div style="flex:1;display:flex;align-items:center;gap:8px">'
+            f'<div style="width:{(valor / maior_valor * 80) if maior_valor > 0 else 0:.1f}%;height:28px;'
+            f'background:{cor_vendido};border-radius:0 4px 4px 0"></div>'
+            f'<div style="white-space:nowrap">{formatar_moeda(valor)}</div>'
+            f'</div></div>'
+            for forma, valor in por_pagamento.items()
+        )
+        st.markdown(linhas, unsafe_allow_html=True)
