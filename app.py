@@ -220,6 +220,7 @@ with aba3:
         if itens_disponiveis.empty:
             st.warning("Não há itens disponíveis em estoque.")
         else:
+            rodada = st.session_state.get("venda_rodada", 0)
             with st.container(border=True):
                 # Itens sem estoque já ficaram de fora em itens_disponiveis
                 opcoes = sorted(itens_disponiveis["nome"].tolist(), key=chave_alfabetica)
@@ -228,7 +229,7 @@ with aba3:
                     opcoes,
                     index=None,
                     placeholder="Digite para buscar o item",
-                    key="venda_item",
+                    key=f"venda_item_{rodada}",
                 )
 
                 if item_selecionado is None:
@@ -241,9 +242,9 @@ with aba3:
                     st.caption(f"Disponível em estoque: {disponivel} | Valor unitário: {formatar_moeda(valor_unitario)}")
 
                 qtd_vendida = st.number_input(
-                    "Quantidade vendida", min_value=1, max_value=max(disponivel, 1), step=1, value=1, key="venda_qtd",
+                    "Quantidade vendida", min_value=1, max_value=max(disponivel, 1), step=1, value=1, key=f"venda_qtd_{rodada}",
                 )
-                forma_pagamento = st.selectbox("Forma de pagamento", FORMAS_PAGAMENTO, key="venda_pagamento")
+                forma_pagamento = st.selectbox("Forma de pagamento", FORMAS_PAGAMENTO, key=f"venda_pagamento_{rodada}")
                 confirmar = st.button("Registrar venda")
 
                 if confirmar:
@@ -265,9 +266,8 @@ with aba3:
                         st.session_state["venda_registrada"] = (
                             f"Venda registrada: {qtd_vendida}x {item_selecionado} = {formatar_moeda(valor_total)}"
                         )
-                        # Limpa a tela para a próxima venda
-                        for chave in ("venda_item", "venda_qtd", "venda_pagamento"):
-                            st.session_state.pop(chave, None)
+                        # Campos com chave nova voltam em branco na próxima venda
+                        st.session_state["venda_rodada"] = rodada + 1
                         st.rerun()
 
 with aba4:
