@@ -46,8 +46,14 @@ def conectar_planilha():
     return aba_itens, aba_vendas
 
 
+def ler_registros(aba):
+    # A planilha está em português e mostra "11,11"; lido como texto, o gspread
+    # tira a vírgula e vira 1111. Por isso lemos o número puro, sem formatação.
+    return aba.get_all_records(value_render_option="UNFORMATTED_VALUE", numericise_ignore=["all"])
+
+
 def carregar_itens(aba_itens):
-    registros = aba_itens.get_all_records()
+    registros = ler_registros(aba_itens)
     df = pd.DataFrame(registros, columns=ITENS_HEADER)
     if df.empty:
         return df
@@ -57,7 +63,7 @@ def carregar_itens(aba_itens):
 
 
 def carregar_vendas(aba_vendas):
-    registros = aba_vendas.get_all_records()
+    registros = ler_registros(aba_vendas)
     df = pd.DataFrame(registros, columns=VENDAS_HEADER)
     if df.empty:
         return df
